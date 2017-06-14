@@ -98,8 +98,30 @@ int main() {
           * Both are in between [-1, 1].
           *
           */
-          double steer_value;
-          double throttle_value;
+          // convert coordinate
+          for(int i=0; i < ptsx.size(); i++) {
+            double x = ptsx[i] - px;
+            double y = ptsy[i] = py;
+            ptsx[i] = x * cos(-psi) - y * sin(-psi);
+            ptsy[i] = y * sin(-psi) + y * cos(-psi);
+          }
+          px = 0;
+          py = 0;
+          psi = 0;
+          // eigen vector
+          Eigen::VectorXd ptsxn = Eigen::VectorXd::Map(ptsx.data(), ptsx.size());
+          Eigen::VectorXd ptsyn = Eigen::VectorXd::Map(ptsy.data(), ptsy.size());
+          // fit
+          auto coeffs = polyfit(ptsxn, ptsyn, 3);
+          double cte = polyeval(coeffs, px) - py;
+          double epsi = psi - atan(coeffs[1] + (2 * coeffs[2] * px) + (3 * coeffs[3] * (px*px)));
+          // state vector
+          Eigen::VectorXd state(6);
+          state << px, py, psi, v, cte, epsi;
+          auto vars = mpc.Solve(state, coeffs);
+
+          double steer_value = vars[0];
+          double throttle_value = vars[1];
 
           json msgJson;
           // NOTE: Remember to divide by deg2rad(25) before you send the steering value back.
