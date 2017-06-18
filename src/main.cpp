@@ -8,7 +8,6 @@
 #include "Eigen-3.3/Eigen/QR"
 #include "MPC.h"
 #include "json.hpp"
-#include "matplotlibcpp.h"
 
 // for convenience
 using json = nlohmann::json;
@@ -70,7 +69,7 @@ int main() {
   uWS::Hub h;
 
   // MPC is initialized here!
-  MPC mpc;
+  MPC mpc;  
 
   h.onMessage([&mpc](uWS::WebSocket<uWS::SERVER> ws, char *data, size_t length,
                      uWS::OpCode opCode) {
@@ -100,24 +99,21 @@ int main() {
           *
           */
           // convert coordinates
-          Eigen::VectorXd v_ptsx(ptsx.size());
-          Eigen::VectorXd v_ptsy(ptsy.size());
+          Eigen::VectorXd c_ptsx(ptsx.size());
+          Eigen::VectorXd c_ptsy(ptsy.size());
           for(int i=0; i < ptsx.size(); i++) {
             double x = ptsx[i] - px;
             double y = ptsy[i] - py;
-            v_ptsx[i] = x * cos(-psi) - y * sin(-psi);
-            v_ptsy[i] = x * sin(-psi) + y * cos(-psi);
+            c_ptsx[i] = x * cos(-psi) - y * sin(-psi);
+            c_ptsy[i] = x * sin(-psi) + y * cos(-psi);
           }
-          px = 0;
-          py = 0;
-          psi = 0;
           // fit
-          auto coeffs = polyfit(v_ptsx, v_ptsy, 3);
-          double cte = polyeval(coeffs, px) - py;
-          double epsi = psi - atan(coeffs[1] + (2 * coeffs[2] * px) + (3 * coeffs[3]* (px*px)));
+          auto coeffs = polyfit(c_ptsx, c_ptsy, 3);
+          double cte = polyeval(coeffs, 0);
+          double epsi = -atan(coeffs[1]);
           // state vector
           Eigen::VectorXd state(6);
-          state << px, py, psi, v, cte, epsi;
+          state << 0, 0, 0, v, cte, epsi;
           auto vars = mpc.Solve(state, coeffs);
 
           double steer_value = vars[6];
@@ -126,16 +122,12 @@ int main() {
           json msgJson;
           // NOTE: Remember to divide by deg2rad(25) before you send the steering value back.
           // Otherwise the values will be in between [-deg2rad(25), deg2rad(25] instead of [-1, 1].
-          msgJson["steering_angle"] = -steer_value;
+          msgJson["steering_angle"] = -steer_value / deg2rad(25);
           msgJson["throttle"] = throttle_value;
 
           //Display the MPC predicted trajectory
           vector<double> mpc_x_vals;
           vector<double> mpc_y_vals;
-          // for (int i = 0; i < ptsx.size(); i++) {
-          //   mpc_x_vals[i] = vars[0];
-          //   mpc_y_vals[i] = vars[1];
-          // }
 
           //.. add (x,y) points to list here, points are in reference to the vehicle's coordinate system
           // the points in the simulator are connected by a Green line
