@@ -8,9 +8,12 @@
 #include "Eigen-3.3/Eigen/QR"
 #include "MPC.h"
 #include "json.hpp"
+#include "csv.h"
+#include "matplotlibcpp.h"
 
 // for convenience
 using json = nlohmann::json;
+namespace plt = matplotlibcpp;
 
 // For converting back and forth between radians and degrees.
 constexpr double pi() { return M_PI; }
@@ -65,11 +68,68 @@ Eigen::VectorXd polyfit(Eigen::VectorXd xvals, Eigen::VectorXd yvals,
   return result;
 }
 
-int main() {
+int main(int argc, char** argv) {
   uWS::Hub h;
 
   // MPC is initialized here!
-  MPC mpc;  
+  MPC mpc;
+
+  bool tuning = argc > 1;
+  // Tuning MPC
+  if (tuning) {
+    io::CSVReader<2> in("../lake_track_waypoints.csv");
+    in.read_header(io::ignore_extra_column, "x", "y");
+    double x; double y;
+    vector<double> xs; vector<double> ys;
+    while(in.read_row(x, y)) {
+      xs.push_back(x);
+      ys.push_back(y);
+    }
+    Eigen::VectorXd x_points(xs.size()); Eigen::VectorXd y_points(ys.size());
+    for (int i=0; i < x_points.size(); i++) {
+      x_points[i] = xs[i];
+      y_points[i] = ys[i];
+    }
+
+    auto coeffs = polyfit(x_points, y_points, 3);
+    double cte = polyeval(coeffs, 0);
+    double epsi = -atan(coeffs[1]);
+    Eigen::VectorXd state(6);
+    state << 0, 0, 0, 10, cte, epsi;
+
+    std::vector<double> x_vals = {state[0]};
+    std::vector<double> y_vals = {state[1]};
+    std::vector<double> psi_vals = {state[2]};
+    std::vector<double> v_vals = {state[3]};
+    std::vector<double> cte_vals = {state[4]};
+    std::vector<double> epsi_vals = {state[5]};
+    std::vector<double> delta_vals = {};
+    std::vector<double> a_vals = {};
+
+    for (size_t i = 0; i < x_points.size(); i++) {
+      auto vars = mpc.Solve(state, coeffs);
+      x_vals.push_back(vars[0]);
+      y_vals.push_back(vars[1]);
+      psi_vals.push_back(vars[2]);
+      v_vals.push_back(vars[3]);
+      cte_vals.push_back(vars[4]);
+      epsi_vals.push_back(vars[5]);
+      delta_vals.push_back(vars[6]);
+      a_vals.push_back(vars[7]);
+      state << vars[0], vars[1], vars[2], vars[3], vars[4], vars[5];
+    }
+    // Plot values
+    plt::subplot(3, 1, 1);
+    plt::title("CTE");
+    plt::plot(cte_vals);
+    plt::subplot(3, 1, 2);
+    plt::title("Delta (Radians)");
+    plt::plot(delta_vals);
+    plt::subplot(3, 1, 3);
+    plt::title("Velocity");
+    plt::plot(v_vals);
+    plt::show();
+  }
 
   h.onMessage([&mpc](uWS::WebSocket<uWS::SERVER> ws, char *data, size_t length,
                      uWS::OpCode opCode) {
@@ -192,12 +252,14 @@ int main() {
     std::cout << "Disconnected" << std::endl;
   });
 
-  int port = 4567;
-  if (h.listen(port)) {
-    std::cout << "Listening to port " << port << std::endl;
-  } else {
-    std::cerr << "Failed to listen to port" << std::endl;
-    return -1;
+  if (!tuning) {
+    int port = 4567;
+    if (h.listen(port)) {
+      std::cout << "Listening to port " << port << std::endl;
+    } else {
+      std::cerr << "Failed to listen to port" << std::endl;
+      return -1;
+    }
+    h.run();
   }
-  h.run();
 }
