@@ -56,3 +56,11 @@ state << 0, 0, 0, v, cte, epsi;
 ```
 
 ## Model Predictive Control with Latency
+The simulator has a 100ms latency to mimic real driving conditions. To handle this, I calculated the cross track and orientation error using the predicted state instead of the current state. The following equation is used to predict the new state using the current state of the car received from the simulator and the given latency.
+
+```
+px = px + latency * v * cos(psi);
+py = py + latency * v * sin(psi);
+psi = psi + v * delta / Lf * latency;
+v = v + a * latency;
+```

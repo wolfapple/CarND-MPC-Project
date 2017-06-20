@@ -151,6 +151,8 @@ int main(int argc, char** argv) {
           double py = j[1]["y"];
           double psi = j[1]["psi"];
           double v = j[1]["speed"];
+          double delta = j[1]["steering_angle"];
+          double a = j[1]["throttle"];
 
           /*
           * TODO: Calculate steering angle and throttle using MPC.
@@ -162,15 +164,20 @@ int main(int argc, char** argv) {
           Eigen::VectorXd c_ptsx(ptsx.size());
           Eigen::VectorXd c_ptsy(ptsy.size());
           for(int i=0; i < ptsx.size(); i++) {
-            double x = ptsx[i] - px;
-            double y = ptsy[i] - py;
-            c_ptsx[i] = x * cos(-psi) - y * sin(-psi);
-            c_ptsy[i] = x * sin(-psi) + y * cos(-psi);
+            c_ptsx[i] = cos(psi) * (ptsx[i] - px) + sin(psi) * (ptsy[i] - py);
+            c_ptsy[i] = -sin(psi) * (ptsx[i] - px) + cos(psi) * (ptsy[i] - py);
           }
+          // 100ms latency
+          const double latency = 0.1;
+          const double Lf = 2.67;
+          px = px + latency * v * cos(psi);
+          py = py + latency * v * sin(psi);
+          psi = psi + v * delta / Lf * latency;
+          v = v + a * latency;
           // fit
           auto coeffs = polyfit(c_ptsx, c_ptsy, 3);
-          double cte = polyeval(coeffs, 0);
-          double epsi = -atan(coeffs[1]);
+          double cte = polyeval(coeffs, px) - py;
+          double epsi = psi - atan(coeffs[1] + (2 * coeffs[2] * px) + (3 * coeffs[3]* (px*px)));
           // state vector
           Eigen::VectorXd state(6);
           state << 0, 0, 0, v, cte, epsi;
